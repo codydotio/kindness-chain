@@ -8,6 +8,35 @@ import {
   isAlienBridgeAvailable,
 } from "@/lib/alien-bridge";
 
+const SESSION_KEY = "kindness_chain_session";
+
+interface StoredSession {
+  user: AlienUser;
+  stats: UserStats;
+}
+
+function saveSession(user: AlienUser, stats: UserStats) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ user, stats }));
+  } catch {}
+}
+
+function loadSession(): StoredSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch {}
+}
+
 export function useAlien() {
   const [user, setUser] = useState<AlienUser | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -15,8 +44,30 @@ export function useAlien() {
   const [error, setError] = useState<string | null>(null);
   const [bridgeReady, setBridgeReady] = useState(false);
 
+  // Auto-restore session on mount
   useEffect(() => {
     setBridgeReady(isAlienBridgeAvailable());
+
+    const session = loadSession();
+    if (session?.user) {
+      setUser(session.user);
+      setStats(session.stats);
+
+      // Re-register with backend (ensures user exists in this serverless instance)
+      fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          alienId: session.user.alienId,
+          displayName: session.user.displayName,
+        }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.stats) setStats(data.stats);
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const verify = useCallback(async () => {
@@ -43,6 +94,10 @@ export function useAlien() {
 
       setUser(data.user);
       setStats(data.stats);
+
+      // Persist session so page refresh keeps you logged in
+      saveSession(data.user, data.stats);
+
       return data.user;
     } catch (err) {
       const message =
@@ -68,11 +123,13 @@ export function useAlien() {
         }
 
         // Then record the gift in our backend
+        // Include displayName so the API can auto-register sender on cold starts
         const res = await fetch("/api/gift", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             fromUserId: user.id,
+            fromDisplayName: user.displayName,
             toUserId,
             amount,
             note,
@@ -84,6 +141,7 @@ export function useAlien() {
         if (data.error) throw new Error(data.error);
 
         setStats(data.stats);
+        if (data.stats) saveSession(user, data.stats);
 
         // Signal useSSE to refetch (SSE pub/sub doesn't work on Vercel serverless)
         if (typeof window !== "undefined") {
@@ -113,11 +171,21 @@ export function useAlien() {
         }),
       });
       const data = await res.json();
-      if (data.stats) setStats(data.stats);
+      if (data.stats) {
+        setStats(data.stats);
+        saveSession(user, data.stats);
+      }
     } catch {
       // silently fail
     }
   }, [user]);
+
+  const logout = useCallback(() => {
+    setUser(null);
+    setStats(null);
+    clearSession();
+    localStorage.removeItem("alien_mock_identity");
+  }, []);
 
   return {
     user,
@@ -128,6 +196,7 @@ export function useAlien() {
     verify,
     gift,
     refreshStats,
+    logout,
   };
 }
 

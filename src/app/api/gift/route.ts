@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { createGift, getUserStats } from "@/lib/store";
+import { createGift, getUserStats, registerUser, getUser } from "@/lib/store";
 
 export async function POST(request: Request) {
   try {
-    const { fromUserId, toUserId, amount, note, txHash } =
+    const { fromUserId, fromDisplayName, toUserId, amount, note, txHash } =
       await request.json();
 
     if (!fromUserId || !toUserId || !amount || !note) {
@@ -11,6 +11,11 @@ export async function POST(request: Request) {
         { error: "fromUserId, toUserId, amount, and note are required" },
         { status: 400 }
       );
+    }
+
+    // Auto-register sender if not found (handles Vercel serverless cold starts)
+    if (!getUser(fromUserId)) {
+      registerUser(fromUserId, fromDisplayName || "Human");
     }
 
     const result = createGift(fromUserId, toUserId, amount, note, txHash);
