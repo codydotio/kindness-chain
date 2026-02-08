@@ -84,8 +84,8 @@ export interface AlienIdentityResult {
 export interface AlienPaymentResult {
   success: boolean;
   txHash: string;
-  amount: number;
-  recipient: string;
+  amount?: number;
+  recipient?: string;
 }
 
 // ============================================================

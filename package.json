@@ -15,8 +15,10 @@
     "d3": "^7.9.0",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.400.0",
-    "@alien_org/sso-sdk-core": "latest",
-    "@alien_org/sso-sdk-react": "latest"
+    "@alien_org/react": "latest",
+    "@alien_org/bridge": "latest",
+    "@alien_org/auth-client": "latest",
+    "@alien-id/miniapp-sdk": "latest"
   },
   "devDependencies": {
     "@types/d3": "^7.4.0",
