@@ -1,42 +1,79 @@
 // ============================================================
-// KINDNESS CHAIN — Type Definitions
+// IGNITE — Type Definitions
 // Alien.org Hackathon @ Frontier Tower, Feb 8 2026
 // ============================================================
 
 export interface AlienUser {
   id: string;
-  alienId: string; // Alien verified identity
+  alienId: string;
   displayName: string;
-  avatar?: string; // Generated from alienId hash
+  avatar?: string;
   verified: boolean;
   createdAt: number;
 }
 
-export interface KindnessGift {
+export type SparkCategory = "cause" | "art" | "tech" | "community" | "other";
+
+export interface Spark {
   id: string;
-  fromUserId: string;
-  toUserId: string;
-  amount: number; // tokens
-  note: string; // required — the "why"
+  creatorId: string;
+  creatorName: string;
+  title: string;
+  description: string;
+  category: SparkCategory;
+  goal: number;
+  raised: number;
+  backerIds: string[];
+  status: "active" | "ignited" | "completed";
   createdAt: number;
-  txHash?: string; // Alien Wallet transaction hash
+  ignitedAt?: number;
+}
+
+export interface Backing {
+  id: string;
+  sparkId: string;
+  sparkTitle: string;
+  backerId: string;
+  backerName: string;
+  amount: number;
+  note?: string;
+  createdAt: number;
+  txHash?: string;
+}
+
+export interface FeedItem {
+  id: string;
+  type: "backing" | "spark_created" | "spark_ignited";
+  sparkId: string;
+  sparkTitle: string;
+  actorName: string;
+  amount?: number;
+  note?: string;
+  createdAt: number;
+}
+
+export interface UserStats {
+  balance: number;
+  sparksCreated: number;
+  sparksBacked: number;
+  totalContributed: number;
 }
 
 export interface ChainNode {
   id: string;
   name: string;
-  avatar?: string;
-  kindnessGiven: number;
-  kindnessReceived: number;
-  totalGifts: number;
-  verified: boolean;
+  type: "user" | "spark";
+  totalActivity: number;
+  raised?: number;
+  goal?: number;
+  status?: string;
+  verified?: boolean;
 }
 
 export interface ChainLink {
   source: string;
   target: string;
   amount: number;
-  note: string;
   createdAt: number;
 }
 
@@ -45,35 +82,16 @@ export interface ChainData {
   links: ChainLink[];
 }
 
-export interface FeedItem {
-  id: string;
-  fromName: string;
-  toName: string;
-  fromAvatar?: string;
-  toAvatar?: string;
-  amount: number;
-  note: string;
-  createdAt: number;
-}
-
-export interface UserStats {
-  balance: number;
-  giftsGiven: number;
-  giftsReceived: number;
-  chainLength: number; // longest chain this user is part of
-}
-
-// SSE event types
-export type SSEEventType = "gift" | "user_joined" | "chain_update";
+// SSE
+export type SSEEventType = "backing" | "spark_created" | "spark_ignited" | "user_joined";
 
 export interface SSEEvent {
   type: SSEEventType;
-  data: FeedItem | ChainNode | ChainData;
+  data: unknown;
   timestamp: number;
 }
 
-// Alien Bridge types — these map to the Alien JS Bridge API
-// HACKATHON NOTE: Replace mock implementations with real Alien SDK calls
+// Alien Bridge types
 export interface AlienIdentityResult {
   success: boolean;
   alienId: string;
@@ -88,24 +106,30 @@ export interface AlienPaymentResult {
   recipient?: string;
 }
 
-// ============================================================
-// AI AGENT TYPES — AI Kindness Matchmaker
-// ============================================================
-
+// AI Agent
 export interface AIInsight {
   id: string;
-  type: "match" | "prompt" | "trend";
+  type: "trending" | "almost_ignited" | "new_spark";
   message: string;
-  confidence: number; // 0-1
-  suggestedRecipient?: string;
-  suggestedNote?: string;
+  confidence: number;
+  sparkId?: string;
   createdAt: number;
-  isAI: true; // always true - trust marker
+  isAI: true;
 }
 
 export interface AIAgentState {
   insights: AIInsight[];
   lastAnalysis: number;
-  communityKindnessScore: number; // 0-100
+  communityScore: number;
   trendDirection: "rising" | "falling" | "stable";
 }
+
+export const IGNITE_THRESHOLD = 3; // unique backers needed to ignite
+export const INITIAL_BALANCE = 10;
+export const CATEGORY_EMOJI: Record<SparkCategory, string> = {
+  cause: "🌍",
+  art: "🎨",
+  tech: "⚡",
+  community: "🤝",
+  other: "✨",
+};

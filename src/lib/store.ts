@@ -1,335 +1,275 @@
-// ============================================================
-// KINDNESS CHAIN — In-Memory Store
-// Swap for a real DB (Postgres, Redis) if you want persistence
-// For the hackathon, in-memory is fast and sufficient
-// ============================================================
+// IGNITE — In-Memory Store
 
-import {
-  AlienUser,
-  KindnessGift,
-  ChainData,
-  ChainNode,
-  ChainLink,
-  FeedItem,
-  UserStats,
-} from "./types";
+import type { AlienUser, Spark, Backing, FeedItem, UserStats, ChainData, ChainNode, ChainLink, AIAgentState, AIInsight } from "./types";
+import { IGNITE_THRESHOLD, INITIAL_BALANCE } from "./types";
 
-// Initial token balance for every verified human
-const INITIAL_BALANCE = 5;
+const users = new Map<string, AlienUser>();
+const sparks = new Map<string, Spark>();
+const backings: Backing[] = [];
+const balances = new Map<string, number>();
+const feed: FeedItem[] = [];
 
-// In-memory storage
-const users: Map<string, AlienUser> = new Map();
-const gifts: KindnessGift[] = [];
-const balances: Map<string, number> = new Map();
-
-// SSE subscribers
 type Subscriber = (event: string, data: unknown) => void;
-const subscribers: Set<Subscriber> = new Set();
+const subscribers = new Set<Subscriber>();
 
-// ---- Seed data for demo/testing ----
-function seedDemoData() {
-  if (users.size > 0) return; // already seeded
+// ---- Seed Data ----
+function seed() {
+  if (users.size > 0) return;
 
-  const demoUsers: Array<{ id: string; name: string }> = [
-    { id: "alien_001", name: "Luna" },
-    { id: "alien_002", name: "Kai" },
-    { id: "alien_003", name: "Sage" },
-    { id: "alien_004", name: "Nova" },
-    { id: "alien_005", name: "River" },
-    { id: "alien_006", name: "Ember" },
-    { id: "alien_007", name: "Atlas" },
-    { id: "alien_008", name: "Wren" },
+  const seedUsers = [
+    { id: "alien_s01", name: "Nova" },
+    { id: "alien_s02", name: "Kai" },
+    { id: "alien_s03", name: "Sage" },
+    { id: "alien_s04", name: "River" },
+    { id: "alien_s05", name: "Ember" },
+    { id: "alien_s06", name: "Atlas" },
   ];
 
-  demoUsers.forEach((u) => {
-    users.set(u.id, {
-      id: u.id,
-      alienId: u.id,
-      displayName: u.name,
-      verified: true,
-      createdAt: Date.now() - Math.random() * 3600000,
-    });
+  seedUsers.forEach((u) => {
+    users.set(u.id, { id: u.id, alienId: u.id, displayName: u.name, verified: true, createdAt: Date.now() - 600000 });
     balances.set(u.id, INITIAL_BALANCE);
   });
 
-  const demoGifts: Array<{
-    from: string;
-    to: string;
-    amount: number;
-    note: string;
-  }> = [
+  const seedSparks: Omit<Spark, "id">[] = [
     {
-      from: "alien_001",
-      to: "alien_002",
-      amount: 2,
-      note: "You helped me debug my code at 2am. That's real friendship.",
+      creatorId: "alien_s01", creatorName: "Nova",
+      title: "AI Music Video for Indie Artists",
+      description: "Fund AI-generated music videos for 3 independent musicians who can't afford traditional production. Verified humans vote on which artists get selected.",
+      category: "art", goal: 25, raised: 18, backerIds: ["alien_s02", "alien_s03"],
+      status: "active", createdAt: Date.now() - 500000,
     },
     {
-      from: "alien_002",
-      to: "alien_003",
-      amount: 1,
-      note: "Your talk on ZK proofs inspired me to learn more.",
+      creatorId: "alien_s03", creatorName: "Sage",
+      title: "Community Garden Drone Mapping",
+      description: "Use AI + drone footage to map and optimize 5 community gardens in SF. All participants verified — no corporate astroturfing.",
+      category: "cause", goal: 15, raised: 15, backerIds: ["alien_s01", "alien_s02", "alien_s04"],
+      status: "ignited", createdAt: Date.now() - 400000, ignitedAt: Date.now() - 100000,
     },
     {
-      from: "alien_003",
-      to: "alien_005",
-      amount: 2,
-      note: "Thank you for sharing your lunch when I forgot mine!",
+      creatorId: "alien_s05", creatorName: "Ember",
+      title: "Open-Source AI Tutor for Kids",
+      description: "Build a free AI tutoring app for underserved schools. Needs funding for API costs. Every backer is a verified human who believes in education equity.",
+      category: "tech", goal: 30, raised: 8, backerIds: ["alien_s06"],
+      status: "active", createdAt: Date.now() - 300000,
     },
     {
-      from: "alien_004",
-      to: "alien_001",
-      amount: 1,
-      note: "Your smile made my day brighter. Simple but powerful.",
-    },
-    {
-      from: "alien_005",
-      to: "alien_006",
-      amount: 1,
-      note: "For teaching me that kindness compounds.",
-    },
-    {
-      from: "alien_006",
-      to: "alien_007",
-      amount: 2,
-      note: "You believed in my idea when nobody else did.",
-    },
-    {
-      from: "alien_007",
-      to: "alien_004",
-      amount: 1,
-      note: "For the coffee. For the conversation. For being human.",
-    },
-    {
-      from: "alien_008",
-      to: "alien_003",
-      amount: 2,
-      note: "You held the door open and asked how I was doing. Nobody does that.",
-    },
-    {
-      from: "alien_001",
-      to: "alien_008",
-      amount: 1,
-      note: "Your energy is contagious. Never stop being you.",
+      creatorId: "alien_s04", creatorName: "River",
+      title: "Neighborhood Skill-Share Platform",
+      description: "Create a hyper-local platform where verified neighbors teach each other skills — cooking, coding, carpentry. Trust starts with real identity.",
+      category: "community", goal: 20, raised: 5, backerIds: ["alien_s01"],
+      status: "active", createdAt: Date.now() - 200000,
     },
   ];
 
-  demoGifts.forEach((g, i) => {
-    const gift: KindnessGift = {
-      id: `gift_demo_${i}`,
-      fromUserId: g.from,
-      toUserId: g.to,
-      amount: g.amount,
-      note: g.note,
-      createdAt: Date.now() - (demoGifts.length - i) * 300000,
-      txHash: `0xdemo${i}`,
-    };
-    gifts.push(gift);
-
-    // Adjust balances
-    const fromBal = balances.get(g.from) || INITIAL_BALANCE;
-    const toBal = balances.get(g.to) || INITIAL_BALANCE;
-    balances.set(g.from, fromBal - g.amount);
-    balances.set(g.to, toBal + g.amount);
-  });
-}
-
-// Initialize seed data
-seedDemoData();
-
-// ---- Public API ----
-
-export function registerUser(
-  alienId: string,
-  displayName: string
-): AlienUser {
-  const existing = users.get(alienId);
-  if (existing) return existing;
-
-  const user: AlienUser = {
-    id: alienId,
-    alienId,
-    displayName,
-    verified: true,
-    createdAt: Date.now(),
-  };
-
-  users.set(alienId, user);
-  balances.set(alienId, INITIAL_BALANCE);
-
-  // Notify subscribers
-  broadcast("user_joined", {
-    id: alienId,
-    name: displayName,
-    verified: true,
+  seedSparks.forEach((s, i) => {
+    const id = `spark_${i + 1}`;
+    sparks.set(id, { ...s, id });
   });
 
-  return user;
+  const seedFeed: FeedItem[] = [
+    { id: "f1", type: "spark_created", sparkId: "spark_1", sparkTitle: "AI Music Video for Indie Artists", actorName: "Nova", createdAt: Date.now() - 500000 },
+    { id: "f2", type: "backing", sparkId: "spark_1", sparkTitle: "AI Music Video for Indie Artists", actorName: "Kai", amount: 10, note: "Art needs to be accessible", createdAt: Date.now() - 450000 },
+    { id: "f3", type: "backing", sparkId: "spark_1", sparkTitle: "AI Music Video for Indie Artists", actorName: "Sage", amount: 8, note: "Love this idea!", createdAt: Date.now() - 420000 },
+    { id: "f4", type: "spark_created", sparkId: "spark_2", sparkTitle: "Community Garden Drone Mapping", actorName: "Sage", createdAt: Date.now() - 400000 },
+    { id: "f5", type: "spark_ignited", sparkId: "spark_2", sparkTitle: "Community Garden Drone Mapping", actorName: "Community", createdAt: Date.now() - 100000 },
+    { id: "f6", type: "spark_created", sparkId: "spark_3", sparkTitle: "Open-Source AI Tutor for Kids", actorName: "Ember", createdAt: Date.now() - 300000 },
+    { id: "f7", type: "backing", sparkId: "spark_3", sparkTitle: "Open-Source AI Tutor for Kids", actorName: "Atlas", amount: 8, note: "Education is everything", createdAt: Date.now() - 250000 },
+    { id: "f8", type: "spark_created", sparkId: "spark_4", sparkTitle: "Neighborhood Skill-Share Platform", actorName: "River", createdAt: Date.now() - 200000 },
+  ];
+  feed.push(...seedFeed);
 }
+
+seed();
+
+// ---- API ----
 
 export function getUser(userId: string): AlienUser | undefined {
   return users.get(userId);
 }
 
-export function getAllUsers(): AlienUser[] {
-  return Array.from(users.values());
+export function registerUser(alienId: string, displayName: string): AlienUser {
+  const existing = users.get(alienId);
+  if (existing) return existing;
+  const user: AlienUser = { id: alienId, alienId, displayName, verified: true, createdAt: Date.now() };
+  users.set(alienId, user);
+  balances.set(alienId, INITIAL_BALANCE);
+  broadcast("user_joined", { id: alienId, name: displayName });
+  return user;
 }
 
 export function getUserStats(userId: string): UserStats {
-  const balance = balances.get(userId) || 0;
-  const given = gifts.filter((g) => g.fromUserId === userId);
-  const received = gifts.filter((g) => g.toUserId === userId);
-
+  const userBackings = backings.filter((b) => b.backerId === userId);
+  const userSparks = Array.from(sparks.values()).filter((s) => s.creatorId === userId);
   return {
-    balance,
-    giftsGiven: given.length,
-    giftsReceived: received.length,
-    chainLength: calculateChainLength(userId),
+    balance: balances.get(userId) || 0,
+    sparksCreated: userSparks.length,
+    sparksBacked: new Set(userBackings.map((b) => b.sparkId)).size,
+    totalContributed: userBackings.reduce((sum, b) => sum + b.amount, 0),
   };
 }
 
-export function createGift(
-  fromUserId: string,
-  toUserId: string,
-  amount: number,
-  note: string,
-  txHash?: string
-): KindnessGift | { error: string } {
-  // Validation
-  if (!users.has(fromUserId)) return { error: "Sender not verified" };
-  if (!users.has(toUserId)) return { error: "Recipient not verified" };
-  if (fromUserId === toUserId) return { error: "Cannot gift yourself" };
-  if (amount < 1 || amount > 5) return { error: "Amount must be 1-5" };
+export function createSpark(
+  creatorId: string, title: string, description: string, goal: number, category: string
+): Spark | { error: string } {
+  if (!users.has(creatorId)) return { error: "Not verified" };
+  if (!title || title.length < 3) return { error: "Title too short" };
+  if (!description || description.length < 10) return { error: "Description too short" };
+  if (goal < 5 || goal > 100) return { error: "Goal must be 5-100 tokens" };
 
-  const senderBalance = balances.get(fromUserId) || 0;
-  if (senderBalance < amount) return { error: "Insufficient balance" };
-  if (!note || note.trim().length < 3)
-    return { error: "A note is required — tell them why!" };
-
-  // Create gift
-  const gift: KindnessGift = {
-    id: `gift_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    fromUserId,
-    toUserId,
-    amount,
-    note: note.trim(),
+  const id = `spark_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const creator = users.get(creatorId)!;
+  const spark: Spark = {
+    id, creatorId, creatorName: creator.displayName,
+    title, description,
+    category: (["cause", "art", "tech", "community", "other"].includes(category) ? category : "other") as Spark["category"],
+    goal, raised: 0, backerIds: [], status: "active",
     createdAt: Date.now(),
-    txHash,
   };
 
-  gifts.push(gift);
+  sparks.set(id, spark);
 
-  // Update balances
-  balances.set(fromUserId, senderBalance - amount);
-  balances.set(toUserId, (balances.get(toUserId) || 0) + amount);
-
-  // Build feed item
-  const fromUser = users.get(fromUserId)!;
-  const toUser = users.get(toUserId)!;
-  const feedItem: FeedItem = {
-    id: gift.id,
-    fromName: fromUser.displayName,
-    toName: toUser.displayName,
-    amount,
-    note: gift.note,
-    createdAt: gift.createdAt,
+  const item: FeedItem = {
+    id: `f_${Date.now()}`, type: "spark_created",
+    sparkId: id, sparkTitle: title, actorName: creator.displayName,
+    createdAt: Date.now(),
   };
+  feed.unshift(item);
+  broadcast("spark_created", spark);
+  return spark;
+}
 
-  // Notify subscribers
-  broadcast("gift", feedItem);
+export function backSpark(
+  sparkId: string, backerId: string, amount: number, note?: string, txHash?: string
+): Backing | { error: string } {
+  if (!users.has(backerId)) return { error: "Not verified" };
+  const spark = sparks.get(sparkId);
+  if (!spark) return { error: "Spark not found" };
+  if (spark.status !== "active") return { error: "Spark already ignited" };
+  if (spark.creatorId === backerId) return { error: "Can't back your own spark" };
+  if (amount < 1 || amount > 10) return { error: "Amount must be 1-10" };
 
-  return gift;
+  const balance = balances.get(backerId) || 0;
+  if (balance < amount) return { error: "Insufficient balance" };
+
+  balances.set(backerId, balance - amount);
+  spark.raised += amount;
+  if (!spark.backerIds.includes(backerId)) {
+    spark.backerIds.push(backerId);
+  }
+
+  const backer = users.get(backerId)!;
+  const backing: Backing = {
+    id: `b_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    sparkId, sparkTitle: spark.title,
+    backerId, backerName: backer.displayName,
+    amount, note, createdAt: Date.now(), txHash,
+  };
+  backings.push(backing);
+
+  const item: FeedItem = {
+    id: `f_${Date.now()}`, type: "backing",
+    sparkId, sparkTitle: spark.title, actorName: backer.displayName,
+    amount, note, createdAt: Date.now(),
+  };
+  feed.unshift(item);
+  broadcast("backing", backing);
+
+  // Check ignite threshold
+  if (spark.backerIds.length >= IGNITE_THRESHOLD && spark.status === "active") {
+    spark.status = "ignited";
+    spark.ignitedAt = Date.now();
+    spark.raised = spark.goal;
+    const igniteItem: FeedItem = {
+      id: `f_ign_${Date.now()}`, type: "spark_ignited",
+      sparkId, sparkTitle: spark.title, actorName: "Community",
+      createdAt: Date.now(),
+    };
+    feed.unshift(igniteItem);
+    broadcast("spark_ignited", spark);
+  }
+
+  return backing;
+}
+
+export function getSparks(filter?: "active" | "ignited" | "all"): Spark[] {
+  const all = Array.from(sparks.values());
+  if (!filter || filter === "all") return all.sort((a, b) => b.createdAt - a.createdAt);
+  return all.filter((s) => s.status === filter).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export function getFeed(limit = 20): FeedItem[] {
+  return feed.slice(0, limit);
 }
 
 export function getChainData(): ChainData {
-  const nodes: ChainNode[] = Array.from(users.values()).map((u) => {
-    const given = gifts.filter((g) => g.fromUserId === u.id);
-    const received = gifts.filter((g) => g.toUserId === u.id);
-    return {
-      id: u.id,
-      name: u.displayName,
-      kindnessGiven: given.reduce((sum, g) => sum + g.amount, 0),
-      kindnessReceived: received.reduce((sum, g) => sum + g.amount, 0),
-      totalGifts: given.length + received.length,
-      verified: u.verified,
-    };
+  const nodes: ChainNode[] = [];
+  const links: ChainLink[] = [];
+  const nodeIds = new Set<string>();
+
+  sparks.forEach((s) => {
+    nodes.push({
+      id: s.id, name: s.title.length > 18 ? s.title.slice(0, 18) + "…" : s.title, type: "spark",
+      totalActivity: s.backerIds.length + s.raised,
+      raised: s.raised, goal: s.goal, status: s.status,
+    });
+    nodeIds.add(s.id);
   });
 
-  // Aggregate links between same pairs
-  const linkMap = new Map<string, ChainLink>();
-  gifts.forEach((g) => {
-    const key = `${g.fromUserId}->${g.toUserId}`;
-    const existing = linkMap.get(key);
-    if (existing) {
-      existing.amount += g.amount;
-      existing.note = g.note; // keep latest note
-      existing.createdAt = g.createdAt;
-    } else {
-      linkMap.set(key, {
-        source: g.fromUserId,
-        target: g.toUserId,
-        amount: g.amount,
-        note: g.note,
-        createdAt: g.createdAt,
+  users.forEach((u) => {
+    const ct = backings.filter((b) => b.backerId === u.id).length;
+    const sc = Array.from(sparks.values()).filter((s) => s.creatorId === u.id).length;
+    if (ct > 0 || sc > 0) {
+      nodes.push({ id: u.id, name: u.displayName, type: "user", totalActivity: ct + sc, verified: true });
+      nodeIds.add(u.id);
+    }
+  });
+
+  sparks.forEach((s) => {
+    if (nodeIds.has(s.creatorId)) links.push({ source: s.creatorId, target: s.id, amount: 2, createdAt: s.createdAt });
+  });
+
+  backings.forEach((b) => {
+    if (nodeIds.has(b.backerId) && nodeIds.has(b.sparkId)) {
+      links.push({ source: b.backerId, target: b.sparkId, amount: b.amount, createdAt: b.createdAt });
+    }
+  });
+
+  return { nodes, links };
+}
+
+export function getAIInsights(): AIAgentState {
+  const allSparks = Array.from(sparks.values());
+  const active = allSparks.filter((s) => s.status === "active");
+  const insights: AIInsight[] = [];
+
+  active.forEach((s) => {
+    const remaining = IGNITE_THRESHOLD - s.backerIds.length;
+    if (remaining === 1) {
+      insights.push({
+        id: `ai_${s.id}`, type: "almost_ignited",
+        message: `"${s.title}" needs just 1 more backer to ignite! ${Math.round((s.raised / s.goal) * 100)}% funded.`,
+        confidence: 0.95, sparkId: s.id, createdAt: Date.now(), isAI: true,
       });
     }
   });
 
+  active.filter((s) => s.backerIds.length === 0).forEach((s) => {
+    insights.push({
+      id: `ai_new_${s.id}`, type: "new_spark",
+      message: `"${s.title}" just launched — be the first to back it!`,
+      confidence: 0.7, sparkId: s.id, createdAt: Date.now(), isAI: true,
+    });
+  });
+
+  const ignitedCount = allSparks.filter((s) => s.status === "ignited").length;
+  const score = Math.min(100, Math.round((ignitedCount / Math.max(allSparks.length, 1)) * 100 + active.length * 10));
+
   return {
-    nodes,
-    links: Array.from(linkMap.values()),
+    insights: insights.slice(0, 5), lastAnalysis: Date.now(),
+    communityScore: score,
+    trendDirection: backings.length > 5 ? "rising" : backings.length > 2 ? "stable" : "falling",
   };
 }
-
-export function getFeed(limit: number = 20): FeedItem[] {
-  return gifts
-    .slice(-limit)
-    .reverse()
-    .map((g) => {
-      const from = users.get(g.fromUserId);
-      const to = users.get(g.toUserId);
-      return {
-        id: g.id,
-        fromName: from?.displayName || "Anonymous",
-        toName: to?.displayName || "Anonymous",
-        amount: g.amount,
-        note: g.note,
-        createdAt: g.createdAt,
-      };
-    });
-}
-
-// ---- Helpers ----
-
-function calculateChainLength(userId: string): number {
-  // BFS to find longest chain this user is part of
-  const visited = new Set<string>();
-  const queue: Array<{ id: string; depth: number }> = [
-    { id: userId, depth: 0 },
-  ];
-  let maxDepth = 0;
-
-  while (queue.length > 0) {
-    const { id, depth } = queue.shift()!;
-    if (visited.has(id)) continue;
-    visited.add(id);
-    maxDepth = Math.max(maxDepth, depth);
-
-    // Find all connections (both directions)
-    gifts.forEach((g) => {
-      if (g.fromUserId === id && !visited.has(g.toUserId)) {
-        queue.push({ id: g.toUserId, depth: depth + 1 });
-      }
-      if (g.toUserId === id && !visited.has(g.fromUserId)) {
-        queue.push({ id: g.fromUserId, depth: depth + 1 });
-      }
-    });
-  }
-
-  return maxDepth;
-}
-
-// ---- SSE Broadcasting ----
 
 export function subscribe(callback: Subscriber) {
   subscribers.add(callback);
@@ -337,28 +277,5 @@ export function subscribe(callback: Subscriber) {
 }
 
 function broadcast(event: string, data: unknown) {
-  subscribers.forEach((cb) => {
-    try {
-      cb(event, data);
-    } catch {
-      // subscriber errored, remove it
-      subscribers.delete(cb);
-    }
-  });
-}
-
-// ---- AI Agent Helpers ----
-
-export function getUsers(): Array<{id: string; name: string; giftsReceived: number; giftsGiven: number}> {
-  return Array.from(users.values()).map(u => ({
-    id: u.alienId,
-    name: u.displayName,
-    giftsReceived: gifts.filter(g => g.toUserId === u.alienId).length,
-    giftsGiven: gifts.filter(g => g.fromUserId === u.alienId).length,
-  }));
-}
-
-export function getRecentGiftsCount(): number {
-  const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-  return gifts.filter(g => g.createdAt > fiveMinAgo).length;
+  subscribers.forEach((cb) => { try { cb(event, data); } catch { subscribers.delete(cb); } });
 }

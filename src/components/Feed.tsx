@@ -19,9 +19,7 @@ function timeAgo(timestamp: number): string {
 
 function avatarHue(name: string): number {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return Math.abs(hash % 360);
 }
 
@@ -29,8 +27,8 @@ export default function Feed({ items }: Props) {
   if (items.length === 0) {
     return (
       <div className="text-center py-12 text-white/30">
-        <div className="text-3xl mb-2">🌟</div>
-        <div className="text-sm">No gifts yet. Be the first!</div>
+        <div className="text-3xl mb-2">🔥</div>
+        <div className="text-sm">No activity yet. Create the first spark!</div>
       </div>
     );
   }
@@ -43,48 +41,33 @@ export default function Feed({ items }: Props) {
             key={item.id}
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ delay: i * 0.05, duration: 0.3 }}
-            className="px-4 py-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] transition-colors"
+            transition={{ delay: i * 0.03, duration: 0.3 }}
+            className="px-4 py-3 rounded-2xl bg-white/[0.03] border border-white/[0.06]"
           >
-            {/* From → To */}
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2">
               <div
-                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
-                style={{
-                  background: `hsl(${avatarHue(item.fromName)}, 60%, 45%)`,
-                }}
+                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                style={{ background: `hsl(${avatarHue(item.actorName)}, 60%, 45%)` }}
               >
-                {item.fromName[0]}
+                {item.actorName[0]}
               </div>
-              <span className="text-white/80 text-sm font-medium">
-                {item.fromName}
-              </span>
-              <span className="text-kindness-glow text-xs">→</span>
-              <div
-                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
-                style={{
-                  background: `hsl(${avatarHue(item.toName)}, 60%, 45%)`,
-                }}
-              >
-                {item.toName[0]}
+              <div className="flex-1 min-w-0">
+                <span className="text-white/80 text-sm font-medium">{item.actorName}</span>
+                <span className="text-white/40 text-sm">
+                  {item.type === "spark_created" && " created a spark"}
+                  {item.type === "backing" && ` backed with ${item.amount} tokens`}
+                  {item.type === "spark_ignited" && ""}
+                </span>
               </div>
-              <span className="text-white/80 text-sm font-medium">
-                {item.toName}
-              </span>
-              <span className="ml-auto text-kindness-glow/60 text-xs font-semibold">
-                +{item.amount}
-              </span>
+              <span className="text-white/20 text-[10px] flex-shrink-0">{timeAgo(item.createdAt)}</span>
             </div>
-
-            {/* Note */}
-            <div className="text-white/50 text-sm italic leading-relaxed pl-8">
-              &ldquo;{item.note}&rdquo;
-            </div>
-
-            {/* Time */}
-            <div className="text-white/20 text-[10px] mt-2 pl-8">
-              {timeAgo(item.createdAt)}
+            <div className="mt-1.5 pl-8">
+              {item.type === "spark_ignited" ? (
+                <div className="text-ignite-flame font-bold text-sm">🔥 {item.sparkTitle} — IGNITED!</div>
+              ) : (
+                <div className="text-white/50 text-sm truncate">{item.sparkTitle}</div>
+              )}
+              {item.note && <div className="text-white/35 text-xs italic mt-1">&ldquo;{item.note}&rdquo;</div>}
             </div>
           </motion.div>
         ))}

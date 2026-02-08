@@ -1,23 +1,19 @@
 import { NextResponse } from "next/server";
-import { getFeed, getAllUsers } from "@/lib/store";
+import { getSparks, getFeed, getChainData } from "@/lib/store";
 
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get("limit") || "20");
-    const type = searchParams.get("type"); // "feed" or "users"
+  const { searchParams } = new URL(request.url);
+  const type = searchParams.get("type") || "sparks";
 
-    if (type === "users") {
-      const users = getAllUsers();
-      return NextResponse.json({ users });
-    }
-
-    const feed = getFeed(limit);
-    return NextResponse.json({ feed });
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to get feed" },
-      { status: 500 }
-    );
+  if (type === "sparks") {
+    return NextResponse.json({ sparks: getSparks("all") });
   }
+  if (type === "feed") {
+    return NextResponse.json({ feed: getFeed() });
+  }
+  if (type === "chain") {
+    return NextResponse.json({ chain: getChainData() });
+  }
+
+  return NextResponse.json({ sparks: getSparks("all") });
 }

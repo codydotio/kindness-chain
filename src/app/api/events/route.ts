@@ -7,55 +7,24 @@ export async function GET() {
 
   const stream = new ReadableStream({
     start(controller) {
-      // Send initial heartbeat
-      controller.enqueue(encoder.encode("data: {\"type\":\"connected\"}\n\n"));
-
-      // Subscribe to store events
-      const unsubscribe = subscribe((event, data) => {
+      const send = (event: string, data: unknown) => {
         try {
-          const payload = JSON.stringify({ type: event, data });
-          controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
-        } catch {
-          // Stream closed
-          unsubscribe();
-        }
-      });
-
-      // Heartbeat every 30s to keep connection alive
-      const heartbeat = setInterval(() => {
-        try {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "heartbeat" })}\n\n`)
-          );
-        } catch {
-          clearInterval(heartbeat);
-          unsubscribe();
-        }
-      }, 30000);
-
-      // Cleanup when stream closes
-      const cleanup = () => {
-        clearInterval(heartbeat);
-        unsubscribe();
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ event, data })}\n\n`));
+        } catch { unsub(); }
       };
 
-      // Handle abort
-      if (typeof AbortSignal !== "undefined") {
-        // The stream will be closed by the client
-        setTimeout(() => {
-          // Keep alive for 5 minutes max
-        }, 300000);
-      }
+      const unsub = subscribe((event, data) => send(event, data));
 
-      return cleanup;
+      const heartbeat = setInterval(() => {
+        try { controller.enqueue(encoder.encode(": heartbeat\n\n")); }
+        catch { clearInterval(heartbeat); unsub(); }
+      }, 30000);
+
+      return () => { clearInterval(heartbeat); unsub(); };
     },
   });
 
   return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
+    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
   });
 }

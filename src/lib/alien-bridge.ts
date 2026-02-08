@@ -67,8 +67,9 @@ export async function verifyIdentity(): Promise<AlienIdentityResult> {
   // AlienProvider reads it automatically via useAlien() hook
   // On the backend, verify with @alien_org/auth-client
   try {
-    // @ts-ignore - Module installed at build time
-    const { isBridgeAvailable, getLaunchParams } = await import("@alien_org/bridge");
+    // Dynamic import — Module available at runtime inside Alien App
+    const bridge = await (Function('return import("@alien_org/bridge")')());
+    const { isBridgeAvailable, getLaunchParams } = bridge;
 
     if (!isBridgeAvailable()) {
       return { success: false, alienId: "", displayName: "", proofOfHuman: false };
@@ -116,8 +117,9 @@ export async function sendPayment(
   // Uses the usePayment() hook in React components (preferred)
   // Or request() from @alien_org/bridge directly:
   try {
-    // @ts-ignore - Module installed at build time
-    const { request } = await import("@alien_org/bridge");
+    // Dynamic import — Module available at runtime inside Alien App
+    const bridge = await (Function('return import("@alien_org/bridge")')());
+    const { request } = bridge;
 
     const invoice = `kc-gift-${Date.now().toString(36)}`;
 

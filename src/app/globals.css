@@ -2,87 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base styles */
-* {
-  -webkit-tap-highlight-color: transparent;
-}
-
-html {
-  scroll-behavior: smooth;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
 body {
   background: #0a0a1a;
   color: #ffffff;
-  overflow-x: hidden;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 4px;
-}
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* Selection */
-::selection {
-  background: rgba(255, 215, 0, 0.3);
-  color: #ffffff;
-}
-
-/* Focus visible */
-:focus-visible {
-  outline: 2px solid rgba(123, 97, 255, 0.5);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* Smooth text rendering for the graph labels */
-svg text {
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-/* Animation for new feed items */
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-slide-in {
-  animation: slideInUp 0.3s ease-out;
-}
-
-/* Gradient text utility */
-.text-gradient-gold {
-  background: linear-gradient(135deg, #FFD700, #FF8C42);
+.gradient-text {
+  background: linear-gradient(135deg, #FF8C42, #FF4B6E, #FFD700);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-.text-gradient-aurora {
-  background: linear-gradient(135deg, #7B61FF, #00D4AA);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 140, 66, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(255, 140, 66, 0.4); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,215,0,0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+.progress-bar-fill {
+  transition: width 0.6s ease-out;
 }
